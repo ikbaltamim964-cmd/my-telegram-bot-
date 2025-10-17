@@ -1,0 +1,111 @@
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+
+BOT_TOKEN = "8171906064:AAHpMx6PBOz951iy0hQpJdgSdkP_CqRQGyk"
+MAIN_CHANNEL = "@Clicktelegrammember"
+ORDER_CHANNEL = "@clickmemberorder"
+
+user_balance = {}
+
+def start(update: Update, context: CallbackContext):
+    user = update.effective_user
+    keyboard = [
+        [InlineKeyboardButton("✅ Join Channel", url=f"https://t.me/{MAIN_CHANNEL[1:]}")],
+        [InlineKeyboardButton("🔄 I've Joined", callback_data="joined")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text(
+        f"👋 হ্যালো {user.first_name}!\n\nদয়া করে প্রথমে আমাদের মেইন চ্যানেলে জয়েন করুন ⬇️",
+        reply_markup=reply_markup
+    )
+
+def joined(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    keyboard = [
+        [InlineKeyboardButton("🛒 Order Member", callback_data="order_member")],
+        [InlineKeyboardButton("💰 Buy Coin", callback_data="buy_coin")],
+        [InlineKeyboardButton("👤 My Account", callback_data="my_account")],
+        [InlineKeyboardButton("🎯 Refer & Earn", callback_data="refer")],
+        [InlineKeyboardButton("📞 Support", callback_data="support")]
+    ]
+    query.edit_message_text("✅ ধন্যবাদ! আপনি সফলভাবে জয়েন করেছেন।\n\nনিচে থেকে একটি অপশন বেছে নিন 👇", 
+                            reply_markup=InlineKeyboardMarkup(keyboard))
+
+def button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+
+    if query.data == "order_member":
+        query.edit_message_text("🔰আপনার Channel / Group link দিন:")
+        context.user_data["step"] = "get_link"
+
+    elif query.data == "buy_coin":
+        query.edit_message_text("প্রতি ১০০০ কয়েনের দাম ১৫ টাকা। নিতে নক দিন 👉 @Tamim66184")
+
+    elif query.data == "support":
+        query.edit_message_text("যে কোনো সমস্যার জন্য: @Tamim66184")
+
+    elif query.data == "my_account":
+        user = query.from_user
+        balance = user_balance.get(user.id, 0)
+        query.edit_message_text(
+            f"🧾 Your Account Information:\n\n"
+            f"👤 Name: {user.first_name}\n"
+            f"🔗 Username: @{user.username}\n"
+            f"🆔 User ID: {user.id}\n\n"
+            f"💰 Total Balance: {balance} Coins"
+        )
+
+    elif query.data == "refer":
+        user = query.from_user
+        query.edit_message_text(
+            f"🔰 প্রতি রেফার আপনি 50 পয়েন্ট পাবেন 🤗\n\n📌 আপনার রেফারেল লিঙ্ক:\n"
+            f"https://t.me/{context.bot.username}?start={user.id}\n\n"
+            "⚠️ আপনি তখনই পয়েন্ট পাবেন যখন আপনার আমন্ত্রিত ব্যক্তি আমাদের চ্যানেলে যোগ দেবেন।"
+        )
+
+def handle_message(update: Update, context: CallbackContext):
+    user = update.effective_user
+    text = update.message.text
+
+    if context.user_data.get("step") == "get_link":
+        context.user_data["link"] = text
+        update.message.reply_text(
+            "আপনি কত মেম্বার কিনতে চান?\n\n"
+            "100 - 300 🪙\n200 - 600 🪙\n500 - 1100 🪙\n1K - 2000 🪙\n\nলিখুন উদাহরণ: 100"
+        )
+        context.user_data["step"] = "get_member"
+
+    elif context.user_data.get("step") == "get_member":
+        try:
+            count = int(text)
+            cost = {100:300, 200:600, 500:1100, 1000:2000}.get(count, None)
+            balance = user_balance.get(user.id, 0)
+            if not cost:
+                update.message.reply_text("ভুল সংখ্যা দিয়েছেন। আবার চেষ্টা করুন।")
+                return
+            if balance < cost:
+                update.message.reply_text("❌ আপনার কাছে পর্যাপ্ত ব্যালেন্স নেই।")
+                return
+
+            user_balance[user.id] = balance - cost
+            context.bot.send_message(
+                chat_id=ORDER_CHANNEL,
+                text=f"🆕 নতুন অর্ডার!\n\nChannel link: {context.user_data['link']}\nMember cost: {count}\nUsername: @{user.username}"
+            )
+            update.message.reply_text("✅ আপনার অর্ডার গ্রহণ করা হয়েছে। ধন্যবাদ!")
+
+        except ValueError:
+            update.message.reply_text("দয়া করে সঠিক সংখ্যা লিখুন (যেমন: 100)।")
+
+updater = Updater(BOT_TOKEN)
+dp = updater.dispatcher
+
+dp.add_handler(CommandHandler("start", start))
+dp.add_handler(CallbackQueryHandler(button))
+dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+dp.add_handler(CallbackQueryHandler(joined, pattern="joined"))
+
+updater.start_polling()
+updater.idle()
